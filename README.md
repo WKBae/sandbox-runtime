@@ -538,6 +538,11 @@ Uses two different patterns:
 
 A few paths are writable without being listed: the child's stdio and `/tmp/claude`, and as a convenience `~/.npm/_logs` and `~/.claude/debug`. Those two home directories are dropped when a `denyRead` entry covers them (and kept when an `allowRead` entry beneath that deny re-opens them), so list them in `allowWrite` if you want them writable under a home read-deny.
 
+- `filesystem.defaultWritePaths` - Set to `false` to leave out `/tmp/claude`, `/private/tmp/claude`, `~/.npm/_logs` and `~/.claude/debug` (boolean, default: true). Only the standard devices (`/dev/stdout`, `/dev/stderr`, `/dev/null`, `/dev/tty`, `/dev/dtracehelper`, `/dev/autofs_nowait`) stay writable without being listed, and the command keeps the `TMPDIR` it inherits instead of `/tmp/claude`; list that directory in `allowWrite` if commands should be able to write there. macOS and Linux.
+- `filesystem.mandatoryDenies` - Set to `false` to leave out the [mandatory deny paths](#mandatory-deny-paths-auto-protected-files) (boolean, default: true). `denyWrite` is then the whole deny list, so a caller that wants any of those paths protected lists them there. macOS and Linux.
+
+Both can be given for a single command, in the configuration passed to `wrapWithSandbox`.
+
 **Path Syntax (macOS):**
 
 Paths support git-style glob patterns on macOS, similar to `.gitignore` syntax:
@@ -949,7 +954,7 @@ Certain sensitive files and directories are **always blocked from writes**, even
 - Claude config directories: `.claude/commands/`, `.claude/agents/`
 - Git hooks and config: `.git/hooks/`, `.git/config`. Where the working directory is a worktree or a submodule, its `.git` is a file: on Linux that file is blocked, so it can be read but not changed, moved or removed.
 
-These paths are blocked automatically - you don't need to add them to `denyWrite`. For example, even with `allowWrite: ["."]`, writing to `.bashrc` or `.git/hooks/pre-commit` will fail:
+These paths are blocked automatically - you don't need to add them to `denyWrite`. `filesystem.mandatoryDenies: false` turns the whole list off. For example, even with `allowWrite: ["."]`, writing to `.bashrc` or `.git/hooks/pre-commit` will fail:
 
 ```bash
 $ srt 'echo "malicious" >> .bashrc'

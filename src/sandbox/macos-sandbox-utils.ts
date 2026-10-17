@@ -1001,7 +1001,9 @@ function generateWriteRules(
   const denyEntries = [
     ...(config.denyWithinAllow || []).map(toPathEntry),
     ...(config.literalDenyWithinAllow ?? []).map(toLiteralPathEntry),
-    ...macGetMandatoryDenyEntries(allowGitConfig),
+    ...(config.mandatoryDenies === false
+      ? []
+      : macGetMandatoryDenyEntries(allowGitConfig)),
   ]
   denyEntries.push(...alsoReadAs(config.denyWithinAllow, 'deny'))
 
@@ -1514,7 +1516,7 @@ export function wrapCommandWithSandboxMacOS(
     socksProxyPort,
     caCertPath,
     proxyAuthToken,
-    writeConfig === undefined,
+    writeConfig === undefined || writeConfig.inheritTmpdir === true,
     encodeSandboxedCommand(attributionCommand),
   )
 

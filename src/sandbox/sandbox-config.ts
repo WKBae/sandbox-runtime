@@ -975,6 +975,25 @@ export const FilesystemConfigSchema = z.object({
     .describe(
       'Allow writes to .git/config files (default: false). Enables git remote URL updates while keeping .git/hooks protected.',
     ),
+  mandatoryDenies: z
+    .boolean()
+    .optional()
+    .describe(
+      'Apply the built-in write denies (default: true): shell rc files, .gitconfig, .gitmodules, ' +
+        '.ripgreprc, .mcp.json, .vscode, .idea, .claude/commands, .claude/agents, .git/hooks and ' +
+        '.git/config, in the working directory and beneath it. When false, denyWrite is the whole ' +
+        'deny list, and a caller that wants any of these protected lists them there. macOS and Linux.',
+    ),
+  defaultWritePaths: z
+    .boolean()
+    .optional()
+    .describe(
+      'Add the default write paths beyond the standard devices (default: true): /tmp/claude, ' +
+        '/private/tmp/claude, ~/.npm/_logs and ~/.claude/debug, with TMPDIR pointed at the ' +
+        'sandbox temp directory. When false, only /dev/stdout, /dev/stderr, /dev/null, /dev/tty, ' +
+        '/dev/dtracehelper and /dev/autofs_nowait are added to allowWrite, and the command keeps ' +
+        'the TMPDIR it inherits; a caller that wants it writable lists it in allowWrite. macOS and Linux.',
+    ),
 })
 
 /**

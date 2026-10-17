@@ -68,6 +68,17 @@ export interface FsWriteRestrictionConfig {
   literalAllowOnly?: string[]
   denyWithinAllow: string[]
   literalDenyWithinAllow?: string[]
+  /**
+   * `false` leaves out the built-in write denies (dangerous files and
+   * directories, `.git/hooks`, `.git/config`), so `denyWithinAllow` is the
+   * whole deny list. Absent means `true`.
+   */
+  mandatoryDenies?: boolean
+  /**
+   * `true` leaves the command's `TMPDIR` as inherited instead of pointing it
+   * at the sandbox's own temp directory. Absent means `false`.
+   */
+  inheritTmpdir?: boolean
 }
 
 /**

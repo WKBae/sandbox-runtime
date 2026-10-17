@@ -2601,12 +2601,14 @@ async function generateFilesystemArgs(
     const configuredDenyPaths = writeConfig.denyWithinAllow || []
     const denyPaths = [
       ...configuredDenyPaths,
-      ...(await linuxGetMandatoryDenyPaths(
-        ripgrepConfig,
-        mandatoryDenySearchDepth,
-        allowGitConfig,
-        abortSignal,
-      )),
+      ...(writeConfig.mandatoryDenies === false
+        ? []
+        : await linuxGetMandatoryDenyPaths(
+            ripgrepConfig,
+            mandatoryDenySearchDepth,
+            allowGitConfig,
+            abortSignal,
+          )),
     ]
     // INVARIANT: one plan, one working directory. A relative entry is resolved
     // against it on both sides of the await above, the only one here.
@@ -3726,7 +3728,7 @@ export async function wrapCommandWithSandboxLinux(
           1080, // Internal SOCKS listener port
           caCertPath,
           proxyAuthToken,
-          writeConfig === undefined,
+          writeConfig === undefined || writeConfig.inheritTmpdir === true,
           attributionKey,
         )
         bwrapArgs.push(

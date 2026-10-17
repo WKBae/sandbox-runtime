@@ -947,7 +947,11 @@ async function initializeSteps(
         // tmpfs, so a write there is permitted and is not a violation.
         allowWritePaths: [
           ...writeRootsOf(monitoredWrites),
-          ...(config.filesystem.disabled ? [] : getDefaultWritePaths()),
+          ...(config.filesystem.disabled
+            ? []
+            : getDefaultWritePaths(undefined, {
+                defaultWritePaths: config.filesystem.defaultWritePaths,
+              })),
         ].map(p => normalizePathForSandbox(p, { literal: true })),
         denyWritePaths: [
           ...monitoredWrites.denyWithinAllow.map(p =>
@@ -959,7 +963,8 @@ async function initializeSteps(
           // filesystem.disabled reaches the wrapper as `writeConfig ===
           // undefined`, which skips every bind and the built-in denies with
           // them, so the monitor must not judge by them either.
-          ...(config.filesystem.disabled
+          ...(config.filesystem.disabled ||
+          config.filesystem.mandatoryDenies === false
             ? []
             : linuxGetCwdMandatoryDenyPaths(getAllowGitConfig())),
         ],
@@ -1483,17 +1488,38 @@ function defaultWritePathsUnder({
   denyRead,
   allowRead,
   credentials,
+  defaultWritePaths,
 }: {
   denyRead: readonly FilesystemPathEntry[]
   allowRead: readonly FilesystemPathEntry[] | undefined
   credentials: CredentialsConfig | undefined
+  defaultWritePaths: boolean | undefined
 }): string[] {
+  const options = { defaultWritePaths }
   const underCredentialDenies = getDefaultWritePaths(
     readRulesOf([], undefined, getCredentialDenyReadPaths(credentials)),
+    options,
   )
-  return getDefaultWritePaths(readRulesOf(denyRead, allowRead, [])).filter(p =>
-    underCredentialDenies.includes(p),
-  )
+  return getDefaultWritePaths(
+    readRulesOf(denyRead, allowRead, []),
+    options,
+  ).filter(p => underCredentialDenies.includes(p))
+}
+
+/**
+ * The write-config fields that carry `filesystem.mandatoryDenies` and
+ * `filesystem.defaultWritePaths` to the platform wrappers. Each is set only
+ * when its setting is off, so a write config for the default policy has
+ * neither field.
+ */
+function writePolicyFlags(
+  mandatoryDenies: boolean | undefined,
+  defaultWritePaths: boolean | undefined,
+): Pick<FsWriteRestrictionConfig, 'mandatoryDenies' | 'inheritTmpdir'> {
+  return {
+    ...(mandatoryDenies === false && { mandatoryDenies: false }),
+    ...(defaultWritePaths === false && { inheritTmpdir: true }),
+  }
 }
 
 /**
@@ -1682,6 +1708,7 @@ function getFsWriteConfig(): FsWriteRestrictionConfig {
       denyRead: config.filesystem.denyRead,
       allowRead: config.filesystem.allowRead,
       credentials: config.credentials,
+      defaultWritePaths: config.filesystem.defaultWritePaths,
     }),
     ...allowPaths,
   ]
@@ -1692,6 +1719,10 @@ function getFsWriteConfig(): FsWriteRestrictionConfig {
     ...literalWriteLists(
       config.filesystem.allowWrite,
       config.filesystem.denyWrite,
+    ),
+    ...writePolicyFlags(
+      config.filesystem.mandatoryDenies,
+      config.filesystem.defaultWritePaths,
     ),
   }
 }
@@ -2136,9 +2167,16 @@ async function wrapWithSandboxOnce(
   // Get configs - use custom if provided, otherwise fall back to main config
   // If neither exists, defaults to empty arrays (most restrictive)
   // Always include default system write paths (like /dev/null, /tmp/claude)
+  // unless filesystem.defaultWritePaths narrows them to the devices.
   let writeConfig: FsWriteRestrictionConfig | undefined
   let readConfig: FsReadRestrictionConfig | undefined
   if (!fsDisabled) {
+    const defaultWritePaths =
+      customConfig?.filesystem?.defaultWritePaths ??
+      config?.filesystem.defaultWritePaths
+    const mandatoryDenies =
+      customConfig?.filesystem?.mandatoryDenies ??
+      config?.filesystem.mandatoryDenies
     const userAllowWrite = stripWriteGlobs(
       'allow',
       customConfig?.filesystem?.allowWrite ??
@@ -2155,6 +2193,7 @@ async function wrapWithSandboxOnce(
           allowRead:
             customConfig?.filesystem?.allowRead ?? config?.filesystem.allowRead,
           credentials: customConfig?.credentials ?? config?.credentials,
+          defaultWritePaths,
         }),
         ...userAllowWrite,
       ],
@@ -2168,6 +2207,7 @@ async function wrapWithSandboxOnce(
         customConfig?.filesystem?.allowWrite ?? config?.filesystem.allowWrite,
         customConfig?.filesystem?.denyWrite ?? config?.filesystem.denyWrite,
       ),
+      ...writePolicyFlags(mandatoryDenies, defaultWritePaths),
     }
     // For a caller that never reads checkDependencies(), the CLI among them.
     if (!ownInstallLogged) {

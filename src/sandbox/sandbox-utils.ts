@@ -579,18 +579,31 @@ export function normalizePathForSandbox(
 }
 
 /**
- * What the sandbox itself needs writable: the child's stdio and the TMPDIR it
- * is handed (generateProxyEnvVars). Kept whatever is read-denied.
+ * What every sandboxed command needs writable: its stdio and the standard
+ * devices. Kept whatever is read-denied, and whatever `defaultWritePaths`
+ * says.
  */
-const SANDBOX_OWN_WRITE_PATHS: readonly string[] = [
+const SANDBOX_DEVICE_WRITE_PATHS: readonly string[] = [
   '/dev/stdout',
   '/dev/stderr',
   '/dev/null',
   '/dev/tty',
   '/dev/dtracehelper',
   '/dev/autofs_nowait',
+]
+
+/**
+ * The TMPDIR the command is handed (generateProxyEnvVars). Kept whatever is
+ * read-denied; left out with the rest when `defaultWritePaths` is false.
+ */
+const SANDBOX_TMPDIR_WRITE_PATHS: readonly string[] = [
   '/tmp/claude',
   '/private/tmp/claude',
+]
+
+const SANDBOX_OWN_WRITE_PATHS: readonly string[] = [
+  ...SANDBOX_DEVICE_WRITE_PATHS,
+  ...SANDBOX_TMPDIR_WRITE_PATHS,
 ]
 
 /**
@@ -632,11 +645,21 @@ const HOME_CONVENIENCE_WRITE_DIRS: readonly string[] = [
  * An entry marked `{ path, literal: true }` is a name whatever it holds. A
  * spelling is read by its characters alone: the name it also is when that
  * exists on disk is for the caller to add as a marked entry.
+ *
+ * With `{ defaultWritePaths: false }` (the `filesystem.defaultWritePaths`
+ * setting) the list is the standard devices alone: no sandbox TMPDIR and no
+ * home convenience directory.
  */
-export function getDefaultWritePaths(readRules?: {
-  denyRead: readonly FilesystemPathEntry[]
-  allowRead?: readonly FilesystemPathEntry[]
-}): string[] {
+export function getDefaultWritePaths(
+  readRules?: {
+    denyRead: readonly FilesystemPathEntry[]
+    allowRead?: readonly FilesystemPathEntry[]
+  },
+  options: { defaultWritePaths?: boolean } = {},
+): string[] {
+  if (options.defaultWritePaths === false) {
+    return [...SANDBOX_DEVICE_WRITE_PATHS]
+  }
   const home = homedir()
   const keptDirs =
     !readRules || readRules.denyRead.length === 0
@@ -794,7 +817,10 @@ export function generateProxyEnvVars(
   // TMPDIR is overridden so temp-file writers land in a path the FS sandbox
   // allows (getDefaultWritePaths). When filesystem policy is disabled
   // (writeConfig === undefined → skipTmpdir), the host TMPDIR is already
-  // writable and /tmp/claude may not exist, so leave it untouched.
+  // writable and /tmp/claude may not exist, so leave it untouched. With
+  // filesystem.defaultWritePaths false (writeConfig.inheritTmpdir →
+  // skipTmpdir) /tmp/claude is not writable, and the caller decides whether
+  // the inherited TMPDIR is.
   // CLAUDE_CODE_TMPDIR is the current name; CLAUDE_TMPDIR is kept for
   // backwards compatibility (#141).
   if (!skipTmpdir) {
